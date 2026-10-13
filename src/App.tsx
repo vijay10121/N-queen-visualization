@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { generateSteps } from './solver'
+import { BOARD_THEMES, PAGE_THEMES } from './themes'
 import type { Step, Stats } from './types'
 import './App.css'
 
@@ -31,6 +32,14 @@ export default function App() {
   const [playState, setPlayState] = useState<PlayState>('idle')
   const [speed, setSpeed] = useState(300) // ms per step
   const [showSolutions, setShowSolutions] = useState(false)
+  const [isThemeModalOpen, setIsThemeModalOpen] = useState(false)
+
+  // Themes
+  const [boardThemeId, setBoardThemeId] = useState(BOARD_THEMES[0].id)
+  const [pageThemeId, setPageThemeId] = useState(PAGE_THEMES[0].id)
+
+  const boardTheme = BOARD_THEMES.find(t => t.id === boardThemeId) || BOARD_THEMES[0]
+  const pageTheme = PAGE_THEMES.find(t => t.id === pageThemeId) || PAGE_THEMES[0]
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const stepsRef = useRef<Step[]>([])
@@ -48,111 +57,179 @@ export default function App() {
   useEffect(() => { stepIndexRef.current = stepIndex }, [stepIndex])
 
   const stopInterval = useCallback(() => {
-    if (intervalRef.current) {
+    if (intervalRef.current !== null) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
   }, [])
 
-  const advance = useCallback(() => {
-    const next = stepIndexRef.current + 1
-    if (next >= stepsRef.current.length) {
-      stopInterval()
-      setPlayState('done')
-      return
-    }
-    stepIndexRef.current = next
-    setStepIndex(next)
-  }, [stopInterval])
-
-  const handleGenerate = useCallback(() => {
-    stopInterval()
-    const size = Math.max(1, Math.min(12, parseInt(boardSizeInput) || 5))
-    setN(size)
-    setBoardSizeInput(String(size))
-    const { steps: s, stats: st } = generateSteps(size)
-    setSteps(s)
-    setStats(st)
+  // Auto-generate on load
+  useEffect(() => {
+    const res = generateSteps(5)
+    setSteps(res.steps)
+    setStats(res.stats)
     setStepIndex(-1)
     setPlayState('idle')
-  }, [boardSizeInput, stopInterval])
+  }, [])
 
-  const handlePlay = useCallback(() => {
+  const handleGenerate = () => {
+    stopInterval()
+    const size = parseInt(boardSizeInput, 10)
+    if (isNaN(size) || size < 1 || size > 12) {
+      alert('Please enter a board size between 1 and 12')
+      return
+    }
+    setN(size)
+    const res = generateSteps(size)
+    setSteps(res.steps)
+    setStats(res.stats)
+    setStepIndex(-1)
+    setPlayState('idle')
+    setShowSolutions(false)
+  }
+
+  const stepForward = useCallback(() => {
+    const cur = stepIndexRef.current
+    const total = stepsRef.current.length
+    if (cur + 1 < total) {
+      setStepIndex(cur + 1)
+    } else {
+      stopInterval()
+      setPlayState('done')
+    }
+  }, [stopInterval])
+
+  const handlePlay = () => {
+    if (steps.length === 0) return
     if (playState === 'done') {
       setStepIndex(-1)
       stepIndexRef.current = -1
     }
     setPlayState('playing')
-    intervalRef.current = setInterval(() => {
-      const next = stepIndexRef.current + 1
-      if (next >= stepsRef.current.length) {
-        stopInterval()
-        setPlayState('done')
-        return
-      }
-      stepIndexRef.current = next
-      setStepIndex(next)
-    }, speed)
-  }, [playState, speed, stopInterval])
+    stopInterval()
+    intervalRef.current = setInterval(stepForward, speed)
+  }
 
-  const handlePause = useCallback(() => {
+  const handlePause = () => {
     stopInterval()
     setPlayState('paused')
-  }, [stopInterval])
+  }
 
-  const handleReset = useCallback(() => {
+  const handleReset = () => {
     stopInterval()
     setStepIndex(-1)
     setPlayState('idle')
-  }, [stopInterval])
+    setShowSolutions(false)
+  }
 
-  const handlePrev = useCallback(() => {
-    stopInterval()
-    setPlayState('paused')
-    setStepIndex(i => Math.max(-1, i - 1))
-  }, [stopInterval])
+  const handleNext = () => {
+    if (stepIndex < steps.length - 1) {
+      setStepIndex(i => i + 1)
+      if (stepIndex + 1 === steps.length - 1) {
+        setPlayState('done')
+      }
+    }
+  }
 
-  const handleNext = useCallback(() => {
-    stopInterval()
-    setPlayState('paused')
-    advance()
-  }, [stopInterval, advance])
+  const handlePrev = () => {
+    if (stepIndex > 0) {
+      setStepIndex(i => i - 1)
+      setPlayState('paused')
+    } else if (stepIndex === 0) {
+      setStepIndex(-1)
+      setPlayState('idle')
+    }
+  }
+
+  // Update interval if speed changes while playing
+  useEffect(() => {
+    if (playState === 'playing') {
+      stopInterval()
+      intervalRef.current = setInterval(stepForward, speed)
+    }
+  }, [speed, playState, stepForward, stopInterval])
 
   // Cleanup on unmount
   useEffect(() => () => stopInterval(), [stopInterval])
 
-  // Update speed without restarting
+  // Close modal on Escape
   useEffect(() => {
-    if (playState === 'playing' && intervalRef.current) {
-      stopInterval()
-      intervalRef.current = setInterval(() => {
-        const next = stepIndexRef.current + 1
-        if (next >= stepsRef.current.length) {
-          stopInterval()
-          setPlayState('done')
-          return
-        }
-        stepIndexRef.current = next
-        setStepIndex(next)
-      }, speed)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsThemeModalOpen(false)
     }
-  }, [speed]) // eslint-disable-line react-hooks/exhaustive-deps
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
+  // Count placed queens right now
+  const placedCount = currentBoard.filter(c => c !== -1).length
   const currentStep = steps[stepIndex]
   const isSolutionStep = currentKind === 'solution'
   const totalSteps = steps.length
 
+  // CSS variables for whole page
+  const pageStyle = {
+    '--bg-app': pageTheme.bgApp,
+    '--bg-panel': pageTheme.bgPanel,
+    '--bg-input': pageTheme.bgInput,
+    '--text-primary': pageTheme.textPrimary,
+    '--text-secondary': pageTheme.textSecondary,
+    '--text-muted': pageTheme.textMuted,
+    '--border-subtle': pageTheme.borderSubtle,
+    '--border-strong': pageTheme.borderStrong,
+    '--accent-primary': pageTheme.accentPrimary,
+    '--accent-hover': pageTheme.accentHover,
+    '--chip-green-bg': pageTheme.chipGreenBg,
+    '--chip-green-text': pageTheme.chipGreenText,
+    '--chip-red-bg': pageTheme.chipRedBg,
+    '--chip-red-text': pageTheme.chipRedText,
+    '--chip-neutral-bg': pageTheme.chipNeutralBg,
+    '--chip-neutral-text': pageTheme.chipNeutralText,
+    '--btn-sec-bg': pageTheme.btnSecondaryBg,
+    '--btn-sec-hover': pageTheme.btnSecondaryHover,
+    '--btn-sec-text': pageTheme.btnSecondaryText,
+    '--shadow': pageTheme.shadow,
+  } as React.CSSProperties
+
+  // CSS variables for board
+  const boardStyle = {
+    gridTemplateColumns: `repeat(${n}, 1fr)`,
+    gridTemplateRows: `repeat(${n}, 1fr)`,
+    '--cell-light': boardTheme.lightSquare,
+    '--cell-dark': boardTheme.darkSquare,
+    '--cell-attacked-light': boardTheme.attackedLight,
+    '--cell-attacked-dark': boardTheme.attackedDark,
+    '--cell-queen-light': boardTheme.queenLight,
+    '--cell-queen-dark': boardTheme.queenDark,
+    '--cell-last-light': boardTheme.lastMoveLight,
+    '--cell-last-dark': boardTheme.lastMoveDark,
+    '--queen-color': boardTheme.queenColor,
+    '--board-border': boardTheme.boardBorder,
+  } as React.CSSProperties
+
   return (
-    <div className="app">
+    <div className="app" style={pageStyle}>
       {/* Header */}
       <header className="header">
-        <h1>N-Queens Visualizer</h1>
-        <p className="subtitle">Watch backtracking solve the N-Queens problem step by step</p>
+        <div className="header-inner">
+          <div className="header-text">
+            <h1>N-Queens Visualizer</h1>
+            <p className="subtitle">Watch backtracking solve the N-Queens problem step by step</p>
+          </div>
+          <button
+            className="theme-nav-btn"
+            onClick={() => setIsThemeModalOpen(true)}
+            title="Open Theme Settings"
+          >
+            🎨 Themes
+          </button>
+        </div>
       </header>
 
       <main className="main">
         {/* Controls */}
         <section className="controls-panel">
+          {/* Board Size */}
           <div className="input-row">
             <label htmlFor="board-size">Board Size</label>
             <input
@@ -169,6 +246,7 @@ export default function App() {
             </button>
           </div>
 
+          {/* Speed */}
           <div className="speed-row">
             <label htmlFor="speed-slider">Speed</label>
             <input
@@ -184,6 +262,7 @@ export default function App() {
             <span className="speed-label">{speed <= 100 ? 'Fast' : speed <= 400 ? 'Medium' : 'Slow'}</span>
           </div>
 
+          {/* Playback */}
           <div className="playback-row">
             <button
               className="btn btn-icon"
@@ -232,20 +311,28 @@ export default function App() {
               <div className="progress-bar">
                 <div
                   className="progress-fill"
-                  style={{ width: `${totalSteps > 0 ? ((stepIndex + 1) / totalSteps) * 100 : 0}%` }}
+                  style={{
+                    width: `${((stepIndex + 1) / totalSteps) * 100}%`,
+                  }}
                 />
               </div>
             </div>
           )}
 
-          {/* Live counter */}
-          {currentStep && (
+          {/* Live counters */}
+          {steps.length > 0 && (
             <div className="live-counters">
-              <span className={`chip ${currentKind === 'place' || currentKind === 'solution' ? 'chip-green' : 'chip-red'}`}>
-                {currentKind === 'solution' ? '✔ Solution found' : currentKind === 'place' ? '⬇ Placing' : '⬆ Backtracking'}
-              </span>
-              <span className="chip chip-gray">Solutions: {currentStep.solutionCount}</span>
-              <span className="chip chip-gray">Backtracks: {currentStep.backtrackCount}</span>
+              <span className="chip chip-green">Queens on board: {placedCount} / {n}</span>
+              {currentStep && (
+                <span className={`chip ${currentKind === 'remove' ? 'chip-red' : 'chip-green'}`}>
+                  {currentKind === 'place' && `Placed row ${currentStep.row + 1}, col ${currentStep.col + 1}`}
+                  {currentKind === 'remove' && `Backtracked from row ${currentStep.row + 1}, col ${currentStep.col + 1}`}
+                  {currentKind === 'solution' && `Solution #${currentStep.solutionCount} found!`}
+                </span>
+              )}
+              {stats && (
+                <span className="chip chip-gray">Solutions found: {stats.solutions}</span>
+              )}
             </div>
           )}
         </section>
@@ -254,10 +341,7 @@ export default function App() {
         <section className="board-section">
           <div
             className={`board ${isSolutionStep ? 'board-solution' : ''}`}
-            style={{
-              gridTemplateColumns: `repeat(${n}, 1fr)`,
-              gridTemplateRows: `repeat(${n}, 1fr)`,
-            }}
+            style={boardStyle}
           >
             {Array.from({ length: n * n }, (_, i) => {
               const row = Math.floor(i / n)
@@ -316,7 +400,7 @@ export default function App() {
             {/* View Solutions button */}
             {playState === 'done' && (
               <button
-                className={`btn btn-solutions ${showSolutions ? 'btn-solutions-active' : ''}`}
+                className={`btn-solutions ${showSolutions ? 'btn-solutions-active' : ''}`}
                 onClick={() => setShowSolutions(s => !s)}
               >
                 {showSolutions ? '▲ Hide Solutions' : `♛ View All ${stats.solutions} Solutions`}
@@ -338,7 +422,13 @@ export default function App() {
                     style={{
                       gridTemplateColumns: `repeat(${n}, 1fr)`,
                       gridTemplateRows: `repeat(${n}, 1fr)`,
-                    }}
+                      '--cell-light': boardTheme.lightSquare,
+                      '--cell-dark': boardTheme.darkSquare,
+                      '--cell-queen-light': boardTheme.queenLight,
+                      '--cell-queen-dark': boardTheme.queenDark,
+                      '--queen-color': boardTheme.queenColor,
+                      '--board-border': boardTheme.boardBorder,
+                    } as React.CSSProperties}
                   >
                     {Array.from({ length: n * n }, (_, i) => {
                       const row = Math.floor(i / n)
@@ -361,6 +451,108 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {/* Theme Settings Modal */}
+      {isThemeModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsThemeModalOpen(false)}>
+          <div className="modal-dialog" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Customize Appearance</h2>
+              <button
+                className="modal-close-btn"
+                onClick={() => setIsThemeModalOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Page Theme */}
+              <div className="modal-section">
+                <h3>Page Theme</h3>
+                <p className="modal-subtitle">Change background and app interface appearance</p>
+                <div className="theme-grid">
+                  {PAGE_THEMES.map(pt => (
+                    <button
+                      key={pt.id}
+                      className={`theme-card ${pageThemeId === pt.id ? 'theme-card-active' : ''}`}
+                      onClick={() => setPageThemeId(pt.id)}
+                    >
+                      <div
+                        className="theme-card-preview"
+                        style={{
+                          background: pt.bgApp,
+                          borderColor: pt.borderStrong,
+                        }}
+                      >
+                        <div
+                          className="theme-card-preview-inner"
+                          style={{
+                            background: pt.bgPanel,
+                            color: pt.textPrimary,
+                            borderColor: pt.accentPrimary,
+                          }}
+                        >
+                          <span style={{ color: pt.accentPrimary, fontWeight: 700 }}>Aa</span>
+                        </div>
+                      </div>
+                      <span className="theme-card-name">{pt.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Board Theme */}
+              <div className="modal-section">
+                <h3>Chessboard Theme</h3>
+                <p className="modal-subtitle">Change colors of board squares and queens</p>
+                <div className="theme-grid">
+                  {BOARD_THEMES.map(bt => (
+                    <button
+                      key={bt.id}
+                      className={`theme-card ${boardThemeId === bt.id ? 'theme-card-active' : ''}`}
+                      onClick={() => setBoardThemeId(bt.id)}
+                    >
+                      <div
+                        className="theme-card-preview"
+                        style={{
+                          background: `linear-gradient(135deg, ${bt.lightSquare} 50%, ${bt.darkSquare} 50%)`,
+                          borderColor: bt.boardBorder,
+                        }}
+                      >
+                        <div
+                          className="theme-card-preview-inner"
+                          style={{
+                            background: bt.queenDark,
+                            color: '#ffffff',
+                            borderRadius: '50%',
+                            width: '20px',
+                            height: '20px',
+                            fontSize: '12px',
+                          }}
+                        >
+                          ♛
+                        </div>
+                      </div>
+                      <span className="theme-card-name">{bt.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn btn-primary"
+                onClick={() => setIsThemeModalOpen(false)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
