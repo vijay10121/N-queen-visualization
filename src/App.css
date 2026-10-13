@@ -50,8 +50,15 @@
   margin-top: 3px;
 }
 
-/* Theme button in Header */
-.theme-nav-btn {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Theme & Stats buttons in Header */
+.theme-nav-btn,
+.stats-nav-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -66,7 +73,13 @@
   transition: all 0.15s ease;
 }
 
-.theme-nav-btn:hover {
+.stats-nav-btn {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.theme-nav-btn:hover,
+.stats-nav-btn:hover {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
   transform: translateY(-1px);
@@ -571,4 +584,81 @@ label {
   border-top: 1px solid var(--border-subtle);
   display: flex;
   justify-content: flex-end;
+}
+
+/* ─── Results Modal (Stats + Solutions) Specifics ───────────── */
+.results-modal-dialog {
+  max-width: 720px;
+  width: 95vw;
+}
+
+.stats-modal-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stats-badge-complete {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--chip-green-text);
+  background: var(--chip-green-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+/* Modal Tab Bar */
+.modal-tab-bar {
+  display: flex;
+  background: var(--bg-input);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 6px 16px 0;
+  gap: 8px;
+}
+
+.modal-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.modal-tab-btn-active {
+  color: var(--accent-primary) !important;
+  border-bottom-color: var(--accent-primary);
+}
+
+.results-modal-body {
+  min-height: 240px;
+}
+
+.modal-solutions-container {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.modal-solutions-grid {
+  justify-content: center;
+}
+
+.stats-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }

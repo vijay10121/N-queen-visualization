@@ -5,6 +5,7 @@ import type { Step, Stats } from './types'
 import './App.css'
 
 type PlayState = 'idle' | 'playing' | 'paused' | 'done'
+type ResultsTab = 'stats' | 'solutions'
 
 // Which cells are attacked by currently placed queens
 function getAttackedCells(board: number[], n: number): Set<string> {
@@ -31,8 +32,9 @@ export default function App() {
   const [stepIndex, setStepIndex] = useState(-1)
   const [playState, setPlayState] = useState<PlayState>('idle')
   const [speed, setSpeed] = useState(300) // ms per step
-  const [showSolutions, setShowSolutions] = useState(false)
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false)
+  const [isResultsModalOpen, setIsResultsModalOpen] = useState(false)
+  const [resultsTab, setResultsTab] = useState<ResultsTab>('stats')
 
   // Themes
   const [boardThemeId, setBoardThemeId] = useState(BOARD_THEMES[0].id)
@@ -85,7 +87,8 @@ export default function App() {
     setStats(res.stats)
     setStepIndex(-1)
     setPlayState('idle')
-    setShowSolutions(false)
+    setIsResultsModalOpen(false)
+    setResultsTab('stats')
   }
 
   const stepForward = useCallback(() => {
@@ -96,6 +99,7 @@ export default function App() {
     } else {
       stopInterval()
       setPlayState('done')
+      setIsResultsModalOpen(true)
     }
   }, [stopInterval])
 
@@ -104,6 +108,7 @@ export default function App() {
     if (playState === 'done') {
       setStepIndex(-1)
       stepIndexRef.current = -1
+      setIsResultsModalOpen(false)
     }
     setPlayState('playing')
     stopInterval()
@@ -119,7 +124,7 @@ export default function App() {
     stopInterval()
     setStepIndex(-1)
     setPlayState('idle')
-    setShowSolutions(false)
+    setIsResultsModalOpen(false)
   }
 
   const handleNext = () => {
@@ -127,6 +132,7 @@ export default function App() {
       setStepIndex(i => i + 1)
       if (stepIndex + 1 === steps.length - 1) {
         setPlayState('done')
+        setIsResultsModalOpen(true)
       }
     }
   }
@@ -152,10 +158,13 @@ export default function App() {
   // Cleanup on unmount
   useEffect(() => () => stopInterval(), [stopInterval])
 
-  // Close modal on Escape
+  // Close modals on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsThemeModalOpen(false)
+      if (e.key === 'Escape') {
+        setIsThemeModalOpen(false)
+        setIsResultsModalOpen(false)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -216,13 +225,39 @@ export default function App() {
             <h1>N-Queens Visualizer</h1>
             <p className="subtitle">Watch backtracking solve the N-Queens problem step by step</p>
           </div>
-          <button
-            className="theme-nav-btn"
-            onClick={() => setIsThemeModalOpen(true)}
-            title="Open Theme Settings"
-          >
-            🎨 Themes
-          </button>
+          <div className="header-actions">
+            {stats && playState === 'done' && (
+              <>
+                <button
+                  className="stats-nav-btn"
+                  onClick={() => {
+                    setResultsTab('stats')
+                    setIsResultsModalOpen(true)
+                  }}
+                  title="View Statistics"
+                >
+                  📊 Statistics
+                </button>
+                <button
+                  className="stats-nav-btn solutions-nav-btn"
+                  onClick={() => {
+                    setResultsTab('solutions')
+                    setIsResultsModalOpen(true)
+                  }}
+                  title="View All Solutions"
+                >
+                  ♛ Solutions ({stats.solutions})
+                </button>
+              </>
+            )}
+            <button
+              className="theme-nav-btn"
+              onClick={() => setIsThemeModalOpen(true)}
+              title="Open Theme Settings"
+            >
+              🎨 Themes
+            </button>
+          </div>
         </div>
       </header>
 
@@ -365,92 +400,142 @@ export default function App() {
             })}
           </div>
         </section>
+      </main>
 
-        {/* Stats panel — shown when done */}
-        {(playState === 'done' || playState === 'paused') && stats && (
-          <section className="stats-panel">
-            <h2>Statistics</h2>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <span className="stat-value">{stats.solutions}</span>
-                <span className="stat-label">Solutions Found</span>
+      {/* Completion Results Modal (Statistics + Solutions Gallery) */}
+      {isResultsModalOpen && stats && (
+        <div className="modal-overlay" onClick={() => setIsResultsModalOpen(false)}>
+          <div className="modal-dialog results-modal-dialog" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="stats-modal-title-group">
+                <span className="stats-badge-complete">✓ Search Completed</span>
+                <h2>{resultsTab === 'stats' ? 'Visualization Statistics' : `All Solutions (${stats.solutions})`}</h2>
               </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.recursiveCalls.toLocaleString()}</span>
-                <span className="stat-label">Recursive Calls</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.placements.toLocaleString()}</span>
-                <span className="stat-label">Placements</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.backtracks.toLocaleString()}</span>
-                <span className="stat-label">Backtracks</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">
-                  {stats.executionTimeMs < 1
-                    ? `${(stats.executionTimeMs * 1000).toFixed(1)} µs`
-                    : `${stats.executionTimeMs.toFixed(3)} ms`}
-                </span>
-                <span className="stat-label">Execution Time</span>
-              </div>
+              <button
+                className="modal-close-btn"
+                onClick={() => setIsResultsModalOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
             </div>
 
-            {/* View Solutions button */}
-            {playState === 'done' && (
+            {/* Modal Tabs */}
+            <div className="modal-tab-bar">
               <button
-                className={`btn-solutions ${showSolutions ? 'btn-solutions-active' : ''}`}
-                onClick={() => setShowSolutions(s => !s)}
+                className={`modal-tab-btn ${resultsTab === 'stats' ? 'modal-tab-btn-active' : ''}`}
+                onClick={() => setResultsTab('stats')}
               >
-                {showSolutions ? '▲ Hide Solutions' : `♛ View All ${stats.solutions} Solutions`}
+                📊 Statistics
               </button>
-            )}
-          </section>
-        )}
+              <button
+                className={`modal-tab-btn ${resultsTab === 'solutions' ? 'modal-tab-btn-active' : ''}`}
+                onClick={() => setResultsTab('solutions')}
+              >
+                ♛ Solutions Gallery ({stats.solutions})
+              </button>
+            </div>
 
-        {/* Solutions gallery */}
-        {showSolutions && stats && playState === 'done' && (
-          <section className="solutions-panel">
-            <h2>All Solutions ({stats.solutions})</h2>
-            <div className="solutions-grid">
-              {stats.solutionBoards.map((board, idx) => (
-                <div key={idx} className="mini-board-wrapper">
-                  <span className="mini-board-label">#{idx + 1}</span>
-                  <div
-                    className="mini-board"
-                    style={{
-                      gridTemplateColumns: `repeat(${n}, 1fr)`,
-                      gridTemplateRows: `repeat(${n}, 1fr)`,
-                      '--cell-light': boardTheme.lightSquare,
-                      '--cell-dark': boardTheme.darkSquare,
-                      '--cell-queen-light': boardTheme.queenLight,
-                      '--cell-queen-dark': boardTheme.queenDark,
-                      '--queen-color': boardTheme.queenColor,
-                      '--board-border': boardTheme.boardBorder,
-                    } as React.CSSProperties}
-                  >
-                    {Array.from({ length: n * n }, (_, i) => {
-                      const row = Math.floor(i / n)
-                      const col = i % n
-                      const hasQueen = board[row] === col
-                      const isLight = (row + col) % 2 === 0
-                      return (
+            <div className="modal-body results-modal-body">
+              {resultsTab === 'stats' ? (
+                <>
+                  <p className="modal-subtitle">
+                    The backtracking algorithm completed an exhaustive search for an <strong>{n}×{n}</strong> board.
+                  </p>
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <span className="stat-value">{stats.solutions}</span>
+                      <span className="stat-label">Solutions Found</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-value">{stats.recursiveCalls.toLocaleString()}</span>
+                      <span className="stat-label">Recursive Calls</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-value">{stats.placements.toLocaleString()}</span>
+                      <span className="stat-label">Placements</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-value">{stats.backtracks.toLocaleString()}</span>
+                      <span className="stat-label">Backtracks</span>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-value">
+                        {stats.executionTimeMs < 1
+                          ? `${(stats.executionTimeMs * 1000).toFixed(1)} µs`
+                          : `${stats.executionTimeMs.toFixed(3)} ms`}
+                      </span>
+                      <span className="stat-label">Execution Time</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="modal-solutions-container">
+                  <div className="solutions-grid modal-solutions-grid">
+                    {stats.solutionBoards.map((board, idx) => (
+                      <div key={idx} className="mini-board-wrapper">
+                        <span className="mini-board-label">#{idx + 1}</span>
                         <div
-                          key={i}
-                          className={`mini-cell ${isLight ? 'cell-light' : 'cell-dark'} ${hasQueen ? 'mini-cell-queen' : ''}`}
+                          className="mini-board"
+                          style={{
+                            gridTemplateColumns: `repeat(${n}, 1fr)`,
+                            gridTemplateRows: `repeat(${n}, 1fr)`,
+                            '--cell-light': boardTheme.lightSquare,
+                            '--cell-dark': boardTheme.darkSquare,
+                            '--cell-queen-light': boardTheme.queenLight,
+                            '--cell-queen-dark': boardTheme.queenDark,
+                            '--queen-color': boardTheme.queenColor,
+                            '--board-border': boardTheme.boardBorder,
+                          } as React.CSSProperties}
                         >
-                          {hasQueen && <span className="mini-queen">♛</span>}
+                          {Array.from({ length: n * n }, (_, i) => {
+                            const row = Math.floor(i / n)
+                            const col = i % n
+                            const hasQueen = board[row] === col
+                            const isLight = (row + col) % 2 === 0
+                            return (
+                              <div
+                                key={i}
+                                className={`mini-cell ${isLight ? 'cell-light' : 'cell-dark'} ${hasQueen ? 'mini-cell-queen' : ''}`}
+                              >
+                                {hasQueen && <span className="mini-queen">♛</span>}
+                              </div>
+                            )
+                          })}
                         </div>
-                      )
-                    })}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          </section>
-        )}
-      </main>
+
+            <div className="modal-footer stats-modal-footer">
+              {resultsTab === 'stats' ? (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setResultsTab('solutions')}
+                >
+                  ♛ View All {stats.solutions} Solutions →
+                </button>
+              ) : (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setResultsTab('stats')}
+                >
+                  ← Back to Statistics
+                </button>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={() => setIsResultsModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Theme Settings Modal */}
       {isThemeModalOpen && (
